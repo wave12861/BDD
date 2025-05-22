@@ -4,9 +4,15 @@
 
 ## 1. BDD tools (Behave)
 
+**Что такое BDD:**
+- Behavior-Driven Development (BDD) — методология разработки, основанная на описании поведения системы
+- Фокусируется на бизнес-ценности и пользовательском опыте
+- Использует естественный язык для описания сценариев
+
 **Что такое Behave:**
-- Behave — это инструмент BDD для Python, аналогичный Cucumber.
-- Позволяет писать тесты на человеко-понятном языке (Gherkin).
+- Behave — это инструмент BDD для Python, аналогичный Cucumber
+- Позволяет писать тесты на человеко-понятном языке (Gherkin)
+- Поддерживает как английский, так и русский языки
 
 **Установка и структура:**
 ```bash
@@ -17,11 +23,14 @@ features/
   example.feature
   steps/
     steps.py
+  environment.py  # настройки и хуки
 ```
 
 **Запуск тестов:**
 ```bash
-behave
+behave  # запуск всех тестов
+behave features/example.feature  # запуск конкретного feature-файла
+behave --tags @smoke  # запуск тестов с определенным тегом
 ```
 
 **Полезные ссылки:**
@@ -42,24 +51,36 @@ behave
 - `Background:` — шаги, выполняющиеся перед каждым сценарием
 - `Scenario Outline:` — шаблон сценария для разных данных
 - `Examples:` — таблица данных для Scenario Outline
+- `@tags` — теги для группировки сценариев
 
 **Пример feature-файла:**
 ```gherkin
-Feature: Showing off behave
-  Scenario: run a simple test
-    Given we have behave installed
-    When we implement a test
-    Then behave will test it for us!
+# language: ru
+Feature: Покупка товара
+  Как покупатель
+  Я хочу добавить товар в корзину
+  Чтобы оформить заказ
 
-  Scenario Outline: Eating cucumbers
-    Given there are <start> cucumbers
-    When I eat <eat> cucumbers
-    Then I should have <left> cucumbers
+  Background:
+    Given я нахожусь на главной странице
+    And я авторизован как "test@example.com"
+
+  @smoke
+  Scenario: Добавление товара в корзину
+    Given я нахожусь в каталоге товаров
+    When я добавляю товар "Телефон" в корзину
+    Then товар "Телефон" должен появиться в корзине
+    And общая сумма корзины должна быть "1000" рублей
+
+  Scenario Outline: Проверка скидок
+    Given я нахожусь в каталоге товаров
+    When я добавляю товар "<товар>" в корзину
+    Then скидка должна быть "<скидка>" рублей
 
     Examples:
-      | start | eat | left |
-      |  12   |  5  |  7   |
-      |  20   |  5  |  15  |
+      | товар    | скидка |
+      | Телефон  | 100    |
+      | Ноутбук  | 200    |
 ```
 
 **Полезные ссылки:**
@@ -73,29 +94,40 @@ Feature: Showing off behave
 **Как реализовать шаги:**
 - В файле `features/steps/steps.py` используйте декораторы:
   - `@given`, `@when`, `@then`, `@step`
+- Каждый шаг должен быть уникальным
+- Используйте контекст (`context`) для передачи данных между шагами
 
 **Примеры:**
 ```python
 from behave import given, when, then
+from selenium import webdriver
+from selenium.webdriver.common.by import By
 
-@given('we have behave installed')
+@given('я нахожусь на главной странице')
 def step_impl(context):
-    pass  # подготовка
+    context.driver = webdriver.Chrome()
+    context.driver.get("http://example.com")
 
-@when('we implement a test')
-def step_impl(context):
-    pass  # действие
+@when('я добавляю товар "{товар}" в корзину')
+def step_impl(context, товар):
+    context.driver.find_element(By.ID, "add-to-cart").click()
 
-@then('behave will test it for us!')
-def step_impl(context):
-    pass  # проверка
+@then('товар "{товар}" должен появиться в корзине')
+def step_impl(context, товар):
+    cart_items = context.driver.find_elements(By.CLASS_NAME, "cart-item")
+    assert any(товар in item.text for item in cart_items)
 ```
 
 **Параметры и типы:**
 ```python
-@when('I eat {number:d} cucumbers')
+@when('я ввожу {number:d} рублей')
 def step_impl(context, number):
     # number — это int
+    pass
+
+@when('я выбираю дату "{date}"')
+def step_impl(context, date):
+    # date — это str
     pass
 ```
 
@@ -104,7 +136,7 @@ def step_impl(context, number):
 import re
 from behave import when
 
-@when(re.compile('I eat (\d+) cucumbers'))
+@when(re.compile('я вижу (\d+) товаров'))
 def step_impl(context, number):
     pass
 ```
@@ -114,40 +146,42 @@ def step_impl(context, number):
 
 ---
 
-## 4. English Examples
+## 4. Environment и Hooks
 
-**Feature file:**
-```gherkin
-Feature: Login to the system
-  Scenario: Successful login
-    Given the user is on the login page
-    When they enter a valid username and password
-    Then they see the main page
-```
+**Что такое environment.py:**
+- Файл для настройки тестового окружения
+- Содержит хуки (функции, выполняемые в определенные моменты)
+- Позволяет настраивать контекст тестов
 
-**Step Definitions:**
+**Пример environment.py:**
 ```python
-from behave import given, when, then
+from behave import fixture
+from selenium import webdriver
 
-@given('the user is on the login page')
-def step_impl(context):
-    pass
+def before_all(context):
+    context.driver = webdriver.Chrome()
 
-@when('they enter a valid username and password')
-def step_impl(context):
-    pass
+def after_all(context):
+    context.driver.quit()
 
-@then('they see the main page')
-def step_impl(context):
-    pass
+def before_scenario(context, scenario):
+    if 'skip' in scenario.tags:
+        scenario.skip()
+
+def after_step(context, step):
+    if step.status == "failed":
+        context.driver.save_screenshot(f"failed_{step.name}.png")
 ```
 
-**With parameters:**
-```python
-@when('they enter username "{username}" and password "{password}"')
-def step_impl(context, username, password):
-    pass
-```
+**Основные хуки:**
+- `before_all` — перед всеми тестами
+- `after_all` — после всех тестов
+- `before_feature` — перед каждым feature-файлом
+- `after_feature` — после каждого feature-файла
+- `before_scenario` — перед каждым сценарием
+- `after_scenario` — после каждого сценария
+- `before_step` — перед каждым шагом
+- `after_step` — после каждого шага
 
 ---
 
@@ -158,4 +192,8 @@ def step_impl(context, username, password):
 - Используйте параметры и типы для универсальных шагов
 - Проверяйте, что ваши шаги не дублируются
 - Для сложных сценариев используйте `Background` и `Scenario Outline`
-- Читайте официальную документацию и примеры 
+- Используйте теги для группировки и фильтрации тестов
+- Читайте официальную документацию и примеры
+- Используйте environment.py для настройки тестового окружения
+- Добавляйте скриншоты при падении тестов
+- Следуйте принципам BDD: описывайте поведение, а не реализацию 
