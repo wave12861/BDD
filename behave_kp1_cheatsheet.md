@@ -16,7 +16,7 @@
 
 **Установка и структура:**
 ```bash
-pip install behave
+pip install behave pytest-playwright playwright
 ```
 ```
 features/
@@ -36,6 +36,7 @@ behave --tags @smoke  # запуск тестов с определенным т
 **Полезные ссылки:**
 - [Behave README](https://github.com/behave/behave/blob/main/README.rst)
 - [Feature Testing Layout](https://behave.readthedocs.io/en/latest/gherkin/#feature-testing-layout)
+- [Playwright Python Docs](https://playwright.dev/python/)
 
 ---
 
@@ -97,38 +98,34 @@ Feature: Покупка товара
 - Каждый шаг должен быть уникальным
 - Используйте контекст (`context`) для передачи данных между шагами
 
-**Примеры:**
+**Примеры с Playwright:**
 ```python
 from behave import given, when, then
-from selenium import webdriver
-from selenium.webdriver.common.by import By
 
 @given('я нахожусь на главной странице')
 def step_impl(context):
-    context.driver = webdriver.Chrome()
-    context.driver.get("http://example.com")
+    context.page.goto("http://example.com")
 
 @when('я добавляю товар "{товар}" в корзину')
 def step_impl(context, товар):
-    context.driver.find_element(By.ID, "add-to-cart").click()
+    context.page.click(f'text={товар}')
+    context.page.click('button#add-to-cart')
 
 @then('товар "{товар}" должен появиться в корзине')
 def step_impl(context, товар):
-    cart_items = context.driver.find_elements(By.CLASS_NAME, "cart-item")
-    assert any(товар in item.text for item in cart_items)
+    context.page.goto("http://example.com/cart")
+    assert context.page.locator(f'text={товар}').is_visible()
 ```
 
 **Параметры и типы:**
 ```python
 @when('я ввожу {number:d} рублей')
 def step_impl(context, number):
-    # number — это int
-    pass
+    context.page.fill('#amount', str(number))
 
 @when('я выбираю дату "{date}"')
 def step_impl(context, date):
-    # date — это str
-    pass
+    context.page.fill('#date', date)
 ```
 
 **Регулярные выражения:**
@@ -138,39 +135,46 @@ from behave import when
 
 @when(re.compile('я вижу (\d+) товаров'))
 def step_impl(context, number):
-    pass
+    count = int(context.page.inner_text('#product-count'))
+    assert count == int(number)
 ```
 
 **Полезные ссылки:**
 - [Step Implementations (Behave Docs)](https://behave.readthedocs.io/en/latest/tutorial/#python-step-implementations)
+- [Playwright Python Docs](https://playwright.dev/python/)
 
 ---
 
-## 4. Environment и Hooks
+## 4. Environment и Hooks (Playwright)
 
 **Что такое environment.py:**
 - Файл для настройки тестового окружения
 - Содержит хуки (функции, выполняемые в определенные моменты)
 - Позволяет настраивать контекст тестов
 
-**Пример environment.py:**
+**Пример environment.py для Playwright:**
 ```python
-from behave import fixture
-from selenium import webdriver
+from playwright.sync_api import sync_playwright
 
 def before_all(context):
-    context.driver = webdriver.Chrome()
+    playwright = sync_playwright().start()
+    browser = playwright.chromium.launch(headless=False)
+    context.browser = browser
+    context.page = browser.new_page()
+    context._playwright = playwright
 
 def after_all(context):
-    context.driver.quit()
+    context.page.close()
+    context.browser.close()
+    context._playwright.stop()
 
 def before_scenario(context, scenario):
-    if 'skip' in scenario.tags:
-        scenario.skip()
+    # Можно добавить подготовку данных или логирование
+    pass
 
 def after_step(context, step):
     if step.status == "failed":
-        context.driver.save_screenshot(f"failed_{step.name}.png")
+        context.page.screenshot(path=f"failed_{step.name}.png")
 ```
 
 **Основные хуки:**
